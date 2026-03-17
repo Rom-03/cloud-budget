@@ -24,7 +24,8 @@
             padding: 12px 30px; color: white; border-radius: 50px; box-shadow: 0 10px 25px rgba(0,0,0,0.2); 
             z-index: 9999; transition: transform 0.5s; font-weight: 600; font-size: 14px; pointer-events: none;
         }
-        #toast.show { transform: translate(-50%, 0); }
+        #toast.show { transform: translate(-50%, 0); background: var(--primary); }
+        #toast.error { background: var(--danger); }
 
         .sidebar {
             position: fixed; left: calc(-1 * var(--sidebar-width)); top: 0; height: 100%;
@@ -58,8 +59,11 @@
         table { width: 100%; border-collapse: collapse; }
         th, td { padding: 15px; text-align: left; border-bottom: 1px solid var(--border); font-size: 14px; }
         
+        .action-delete { color: var(--danger); border: none; background: none; cursor: pointer; font-size: 11px; font-weight: bold; text-decoration: underline; padding: 0; }
+        .action-delete:hover { opacity: 0.7; }
+
         .modal-overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.6); z-index: 2000; align-items: center; justify-content: center; backdrop-filter: blur(3px); }
-        .modal-content { background: var(--card-bg); padding: 25px; border-radius: 15px; width: 320px; }
+        .modal-content { background: var(--card-bg); padding: 25px; border-radius: 15px; width: 340px; }
         input, select, textarea { padding: 12px; margin: 8px 0; width: 100%; border-radius: 8px; border: 1px solid var(--border); background: var(--card-bg); color: var(--text); box-sizing: border-box; font-family: inherit; }
         
         .confirm-overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.7); z-index: 3000; align-items: center; justify-content: center; }
@@ -68,6 +72,9 @@
         .add-btn { background: var(--primary); color: white; border: none; padding: 10px 15px; border-radius: 8px; cursor: pointer; font-weight: 600; font-size: 12px; }
         .section { display: none; }
         .section.active { display: block; animation: fadeIn 0.3s ease; }
+        
+        .smart-tip { background: rgba(44, 123, 229, 0.1); color: var(--primary); padding: 10px; border-radius: 8px; font-size: 11px; margin: 5px 0 10px 0; line-height: 1.4; border-left: 3px solid var(--primary); }
+
         @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
 
         .sum-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 15px; margin-bottom: 20px; }
@@ -75,17 +82,13 @@
         .sum-card div:first-child { font-size: 11px; color: #888; font-weight: bold; text-transform: uppercase; }
         .sum-card div:last-child { font-size: 18px; font-weight: 800; margin-top: 5px; }
 
-        /* Notes Styling */
         .note-card { background: var(--card-bg); border: 1px solid var(--border); padding: 15px; border-radius: 12px; margin-bottom: 15px; position: relative; }
         .note-card.pinned { border: 2px solid var(--primary); background: rgba(44, 123, 229, 0.03); }
         .note-date { font-size: 11px; color: #888; margin-bottom: 8px; }
         .note-text { font-size: 14px; white-space: pre-wrap; line-height: 1.5; }
         .note-actions { display: flex; gap: 15px; margin-top: 10px; }
-        .note-delete { color: var(--danger); font-size: 11px; cursor: pointer; font-weight: bold; text-decoration: underline; }
-        .note-edit { color: var(--primary); font-size: 11px; cursor: pointer; font-weight: bold; text-decoration: underline; }
-        .note-pin { color: var(--warning); font-size: 11px; cursor: pointer; font-weight: bold; text-decoration: underline; }
-
-        .harvest-filter-box { background: var(--card-bg); padding: 15px; border-radius: 12px; margin-bottom: 20px; border: 1px dashed var(--primary); display: flex; align-items: center; gap: 15px; }
+        .note-delete, .note-edit, .note-pin { font-size: 11px; cursor: pointer; font-weight: bold; text-decoration: underline; }
+        .note-delete { color: var(--danger); } .note-edit { color: var(--primary); } .note-pin { color: var(--warning); }
     </style>
 </head>
 <body>
@@ -122,13 +125,12 @@
 
 <div id="mainApp" style="display:none;">
     <header>
-        <div class="header-left" style="display:flex; align-items:center; gap:15px;">
+        <div style="display:flex; align-items:center; gap:15px;">
             <button class="hamburger" onclick="toggleSidebar()"><span></span><span></span><span></span></button>
             <div style="font-weight:700;">Financial Tracker</div>
         </div>
-        <div class="header-right" style="display:flex; align-items:center; gap:10px;">
+        <div style="display:flex; align-items:center; gap:10px;">
             <button onclick="toggleTheme()" id="themeBtn" style="background:rgba(255,255,255,0.2); border:none; color:white; padding:5px 10px; border-radius:15px; cursor:pointer; font-size:11px;">🌙 Dark</button>
-            <button onclick="resetAllData()" style="background:rgba(255, 165, 0, 0.3); border:none; color:white; padding:5px 10px; border-radius:15px; cursor:pointer; font-size:11px;">⚠️ Reset Data</button>
             <button onclick="logout()" style="background:rgba(255, 71, 87, 0.2); border:none; color:white; padding:5px 10px; border-radius:15px; cursor:pointer; font-size:11px;">Logout</button>
         </div>
     </header>
@@ -152,51 +154,6 @@
             <div style="background:var(--card-bg); padding:20px; border-radius:12px; height:320px; box-shadow:var(--shadow);"><canvas id="budgetChart"></canvas></div>
         </div>
 
-        <div id="contribution" class="section">
-            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:15px;">
-                <h3>Partner Contributions</h3>
-                <button class="add-btn" onclick="openAddModal('contribution')">+ Add Contribution</button>
-            </div>
-            <div class="sum-grid">
-                <div class="sum-card"><div>Jerome Net</div><div id="sumJerome" style="color:var(--primary)">₱0.00</div></div>
-                <div class="sum-card"><div>Jennifer Net</div><div id="sumJennifer" style="color:var(--success)">₱0.00</div></div>
-                <div class="sum-card"><div>Pool Balance</div><div id="sumCombined" style="color:#6c5ce7">₱0.00</div></div>
-            </div>
-            <div class="table-container">
-                <table>
-                    <thead><tr><th>Date</th><th>Contributor</th><th>Description</th><th>Amount</th><th>Action</th></tr></thead>
-                    <tbody id="conTable"></tbody>
-                </table>
-            </div>
-        </div>
-
-        <div id="harvest" class="section">
-            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:15px;">
-                <h3>Harvest Accounts</h3>
-                <div style="display:flex; gap:10px;">
-                    <button class="add-btn" style="background:var(--success)" onclick="openAddModal('harvest')">+ New Harvest</button>
-                    <button class="add-btn" style="background:var(--danger)" onclick="openAddModal('harvest_expense')">+ Add Expense</button>
-                </div>
-            </div>
-            <div class="sum-grid">
-                <div class="sum-card"><div>Gross Harvest</div><div id="sumHarvestRev" style="color:var(--primary)">₱0.00</div></div>
-                <div class="sum-card"><div>Total Expenses</div><div id="sumHarvestExp" style="color:var(--danger)">₱0.00</div></div>
-                <div class="sum-card"><div>Account Profit</div><div id="sumHarvestProfit" style="color:var(--success)">₱0.00</div></div>
-            </div>
-            <div class="harvest-filter-box">
-                <select id="harvestViewFilter" onchange="renderHarvests()" style="flex:1; margin:0;"></select>
-            </div>
-            <div id="harvestContainer"></div>
-        </div>
-
-        <div id="business-notes" class="section">
-            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:15px;">
-                <h3>Business Note</h3>
-                <button class="add-btn" onclick="openAddModal('note')">+ New Note</button>
-            </div>
-            <div id="notesContainer"></div>
-        </div>
-
         <div id="income" class="section">
             <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:15px;"><h3>Income</h3><button class="add-btn" onclick="openAddModal('income')">+ Add Income</button></div>
             <div class="table-container"><table><thead><tr><th>Date</th><th>Description</th><th>Amount</th><th>Action</th></tr></thead><tbody id="incomeTable"></tbody></table></div>
@@ -213,9 +170,42 @@
             <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:15px;"><h3>Liabilities</h3><button class="add-btn" onclick="openAddModal('liability')">+ Add Debt</button></div>
             <div class="table-container"><table><thead><tr><th>Date</th><th>Description</th><th>Amount</th><th>Action</th></tr></thead><tbody id="liaTable"></tbody></table></div>
         </div>
+        
+        <div id="contribution" class="section">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:15px;"><h3>Partner Contributions</h3><button class="add-btn" onclick="openAddModal('contribution')">+ Add Contribution</button></div>
+            <div class="sum-grid">
+                <div class="sum-card"><div>Jerome Net</div><div id="sumJerome" style="color:var(--primary)">₱0.00</div></div>
+                <div class="sum-card"><div>Jennifer Net</div><div id="sumJennifer" style="color:var(--success)">₱0.00</div></div>
+                <div class="sum-card"><div>Pool Balance</div><div id="sumCombined" style="color:#6c5ce7">₱0.00</div></div>
+            </div>
+            <div class="table-container"><table><thead><tr><th>Date</th><th>Contributor</th><th>Desc</th><th>Amount</th><th>Action</th></tr></thead><tbody id="conTable"></tbody></table></div>
+        </div>
+
+        <div id="harvest" class="section">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:15px;">
+                <h3>Harvest Accounts</h3>
+                <div style="display:flex; gap:10px;">
+                    <button class="add-btn" style="background:var(--success)" onclick="openAddModal('harvest')">+ New Harvest</button>
+                    <button class="add-btn" style="background:var(--danger)" onclick="openAddModal('harvest_expense')">+ Add Expense</button>
+                </div>
+            </div>
+            <div class="sum-grid">
+                <div class="sum-card"><div>Gross Harvest</div><div id="sumHarvestRev" style="color:var(--primary)">₱0.00</div></div>
+                <div class="sum-card"><div>Total Expenses</div><div id="sumHarvestExp" style="color:var(--danger)">₱0.00</div></div>
+                <div class="sum-card"><div>Account Profit</div><div id="sumHarvestProfit" style="color:var(--success)">₱0.00</div></div>
+            </div>
+            <select id="harvestViewFilter" onchange="renderHarvests()" style="margin-bottom:15px;"></select>
+            <div id="harvestContainer"></div>
+        </div>
+
+        <div id="business-notes" class="section">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:15px;"><h3>Business Note</h3><button class="add-btn" onclick="openAddModal('note')">+ New Note</button></div>
+            <div id="notesContainer"></div>
+        </div>
+
         <div id="savings" class="section">
-            <h3>Savings Summary (Yearly)</h3>
-            <div class="table-container"><table><thead><tr><th>Month</th><th>Saved Amount</th></tr></thead><tbody id="savingsTable"></tbody><tfoot><tr style="font-weight:bold; background:rgba(0,0,0,0.05);"><td>Running Total</td><td id="overallSavings">₱0.00</td></tr></tfoot></table></div>
+            <h3>Yearly Summary</h3>
+            <div class="table-container"><table><thead><tr><th>Month</th><th>Saved</th></tr></thead><tbody id="savingsTable"></tbody><tfoot><tr style="font-weight:bold;"><td>Total</td><td id="overallSavings">₱0.00</td></tr></tfoot></table></div>
         </div>
     </div>
 </div>
@@ -225,18 +215,23 @@
         <h3 id="modalTitle">Add Entry</h3>
         <div id="standardFields">
             <input type="date" id="modalDate">
-            <div id="modalContributorBox" style="display:none;">
-                <select id="modalContributor"><option value="Jerome">Jerome</option><option value="Jennifer">Jennifer</option></select>
+            <select id="modalContributor" style="display:none;"><option value="Jerome">Jerome</option><option value="Jennifer">Jennifer</option></select>
+            <div id="modalCatBox" style="display:none;">
+                <select id="modalCat">
+                    <option>FOOD</option><option>OFFICE</option><option>INTERNET</option><option>WATER</option>
+                    <option>ELECTRICITY</option><option>ALLOWANCE</option><option>GROCERY</option><option>MISCELLANEOUS</option>
+                </select>
             </div>
-            <div id="modalCatBox" style="display:none;"><select id="modalCat"><option>FOOD</option><option>RENT</option><option>UTILITIES</option><option>INTERNET</option><option>TRANSPORT</option><option>GROCERY</option><option>MISC</option></select></div>
             <div id="modalAccountBox" style="display:none;"><select id="modalAccountSelect"></select></div>
             <input type="text" id="modalDesc" placeholder="Description">
-            <p id="hintText" style="font-size: 10px; color: var(--warning); margin: 0; display:none;">Tip: Type "Jerome" or "Jennifer" in desc to deduct from their contribution.</p>
+            
+            <div id="harvestTip" class="smart-tip" style="display:none;">
+                <strong>💡 Tip:</strong> Mention "Jerome" or "Jennifer" in the description to deduct from their contribution balance.
+            </div>
+
             <input type="number" id="modalAmount" placeholder="Amount (₱)">
         </div>
-        <div id="noteFields" style="display:none;">
-            <textarea id="modalNoteBody" rows="6" placeholder="Write your business notes here..."></textarea>
-        </div>
+        <div id="noteFields" style="display:none;"><textarea id="modalNoteBody" rows="6" placeholder="Write notes..."></textarea></div>
         <div style="display:flex; gap:10px; margin-top:20px;">
             <button onclick="closeModal('addModal')" style="flex:1; padding:12px; border-radius:8px; border:none; background:#eee;">Cancel</button>
             <button onclick="processAdd()" style="flex:1; padding:12px; border-radius:8px; border:none; background:var(--primary); color:white;">Save</button>
@@ -244,22 +239,36 @@
     </div>
 </div>
 
-<div id="deleteConfirmModal" class="confirm-overlay"><div class="confirm-box"><h3>Delete Entry?</h3><div style="display:flex; gap:10px; margin-top:20px;"><button onclick="closeConfirm()" style="flex:1; padding:10px; border-radius:8px; border:none;">Cancel</button><button id="confirmBtn" style="flex:1; padding:10px; border-radius:8px; border:none; background:var(--danger); color:white;">Delete</button></div></div></div>
+<div id="deleteConfirmModal" class="confirm-overlay"><div class="confirm-box"><h3>Delete Entry?</h3><div style="display:flex; gap:10px; margin-top:20px;"><button onclick="closeConfirm()" style="flex:1; padding:10px; border-radius:8px; border:none;">No</button><button id="confirmBtn" style="flex:1; padding:10px; border-radius:8px; border:none; background:var(--danger); color:white;">Delete</button></div></div></div>
 
 <script>
 let incomes=[], expenses=[], unbudgeted=[], liabilities=[], harvests=[], harvestTransactions=[], contributions=[], businessNotes=[], myChart, currentAddType = '', deleteTgt={}, editNoteId=null;
 const fullMonths=["January","February","March","April","May","June","July","August","September","October","November","December"];
 
-function applyTheme(t) { document.body.setAttribute("data-theme", t); document.getElementById("themeBtn").innerText = t === "dark" ? "☀️ Light" : "🌙 Dark"; localStorage.setItem("theme", t); }
+function getPartnerBalances() {
+    let jBase = contributions.filter(c => c.contributor === 'Jerome').reduce((a,b) => a + b.amount, 0);
+    let nBase = contributions.filter(c => c.contributor === 'Jennifer').reduce((a,b) => a + b.amount, 0);
+    let jDed = harvestTransactions.filter(t => t.desc.toLowerCase().includes('jerome')).reduce((a,b) => a+b.amount, 0);
+    let nDed = harvestTransactions.filter(t => t.desc.toLowerCase().includes('jennifer')).reduce((a,b) => a+b.amount, 0);
+    return { jerome: jBase - jDed, jennifer: nBase - nDed };
+}
+
+function applyTheme(t) { document.body.setAttribute("data-theme", t); localStorage.setItem("theme", t); }
 function toggleTheme(){ applyTheme(document.body.getAttribute("data-theme") === "dark" ? "light" : "dark"); render(); }
 function toggleSidebar(){ document.getElementById('sidebar').classList.toggle('open'); document.getElementById('overlay').classList.toggle('active'); }
 function closeModal(id){ document.getElementById(id).style.display="none"; editNoteId = null; }
 function closeConfirm(){ document.getElementById('deleteConfirmModal').style.display='none'; }
 function logout() { localStorage.removeItem("isLoggedIn"); location.reload(); }
 function formatAmount(v){ return (v < 0 ? "-₱" : "₱") + Math.abs(v).toLocaleString(undefined,{minimumFractionDigits:2}); }
-function showToast(m) { const t = document.getElementById("toast"); t.innerText = m; t.classList.add("show"); setTimeout(() => t.classList.remove("show"), 2000); }
 
-function resetAllData() { if(confirm("Are you sure?")) { localStorage.clear(); location.reload(); } }
+function showToast(m, isError = false) { 
+    const t = document.getElementById("toast"); 
+    t.innerText = m; 
+    if(isError) t.classList.add("error"); else t.classList.remove("error");
+    t.classList.add("show"); 
+    setTimeout(() => t.classList.remove("show"), 2500); 
+}
+
 function checkLogin(){ if(document.getElementById("passInput").value==="1234"){ localStorage.setItem("isLoggedIn", "true"); document.getElementById("loginOverlay").style.display="none"; document.getElementById("mainApp").style.display="block"; load(); } }
 
 function switchSection(id, el){
@@ -278,51 +287,32 @@ yearSel.value=new Date().getFullYear();
 monthSel.onchange=render; yearSel.onchange=render;
 
 function openAddModal(type) {
+    if(type === 'harvest_expense' && harvests.length === 0) {
+        showToast("Error: Add a Harvest Account first!", true);
+        return;
+    }
     currentAddType = type;
     document.getElementById('modalCatBox').style.display = type==='budget'?'block':'none';
     document.getElementById('modalAccountBox').style.display = type==='harvest_expense'?'block':'none';
-    document.getElementById('modalContributorBox').style.display = type==='contribution'?'block':'none';
-    document.getElementById('hintText').style.display = type==='harvest_expense'?'block':'none';
+    document.getElementById('modalContributor').style.display = type==='contribution'?'block':'none';
+    document.getElementById('modalDesc').style.display = type==='budget'?'none':'block';
+    document.getElementById('harvestTip').style.display = type==='harvest_expense'?'block':'none';
 
-    const standardFields = document.getElementById('standardFields');
-    const noteFields = document.getElementById('noteFields');
-    
     if(type === 'note') {
-        standardFields.style.display = 'none';
-        noteFields.style.display = 'block';
-        if(!editNoteId) document.getElementById('modalNoteBody').value = '';
+        document.getElementById('standardFields').style.display = 'none';
+        document.getElementById('noteFields').style.display = 'block';
     } else {
-        standardFields.style.display = 'block';
-        noteFields.style.display = 'none';
+        document.getElementById('standardFields').style.display = 'block';
+        document.getElementById('noteFields').style.display = 'none';
         if(type === 'harvest_expense'){
             const sel = document.getElementById('modalAccountSelect');
             sel.innerHTML = harvests.map(h => `<option value="${h.id}">${h.desc}</option>`).join('');
-            if(harvests.length === 0) { alert("Create a Harvest Account first."); return; }
         }
         document.getElementById('modalDate').value = new Date().toISOString().split('T')[0];
-        document.getElementById('modalDesc').value = ''; 
+        document.getElementById('modalDesc').value = '';
         document.getElementById('modalAmount').value = '';
     }
-
-    document.getElementById('modalTitle').innerText = (editNoteId ? "Edit " : "Add ") + type.replace('-', ' ').toUpperCase();
     document.getElementById('addModal').style.display = 'flex';
-}
-
-function editNote(id) {
-    const note = businessNotes.find(n => n.id === id);
-    if(note) {
-        editNoteId = id;
-        document.getElementById('modalNoteBody').value = note.text;
-        openAddModal('note');
-    }
-}
-
-function togglePin(id) {
-    const idx = businessNotes.findIndex(n => n.id === id);
-    if(idx !== -1) {
-        businessNotes[idx].pinned = !businessNotes[idx].pinned;
-        save();
-    }
 }
 
 function processAdd() {
@@ -341,6 +331,24 @@ function processAdd() {
         const date = document.getElementById('modalDate').value, desc = document.getElementById('modalDesc').value, cat = document.getElementById('modalCat').value;
         const amt = Number(document.getElementById('modalAmount').value), harvestId = document.getElementById('modalAccountSelect').value, contributor = document.getElementById('modalContributor').value;
         if(!date || !amt) return;
+        
+        // ADAPTIVE HARVEST GUARD
+        if(currentAddType === 'harvest_expense') {
+            const balances = getPartnerBalances();
+            const isJerome = desc.toLowerCase().includes('jerome');
+            const isJennifer = desc.toLowerCase().includes('jennifer');
+
+            // Only block if a partner's name is used and they have 0 balance
+            if(isJerome && balances.jerome <= 0) {
+                showToast("Error: Jerome has zero total contribution!", true);
+                return;
+            }
+            if(isJennifer && balances.jennifer <= 0) {
+                showToast("Error: Jennifer has zero total contribution!", true);
+                return;
+            }
+        }
+
         if(currentAddType === 'income') incomes.push({date, desc, amount: amt});
         else if(currentAddType === 'budget') expenses.push({date, cat: cat, amount: amt});
         else if(currentAddType === 'unbudget') unbudgeted.push({date, desc, amount: amt});
@@ -373,17 +381,10 @@ document.getElementById('confirmBtn').onclick=()=>{
 function render(){
     let fInc=filterData(incomes), fExp=filterData(expenses), fUn=filterData(unbudgeted), fLia=filterData(liabilities), fCon=filterData(contributions);
     
-    let jeromeBase = contributions.filter(c => c.contributor === 'Jerome').reduce((a,b) => a + b.amount, 0);
-    let jenniferBase = contributions.filter(c => c.contributor === 'Jennifer').reduce((a,b) => a + b.amount, 0);
-    let jeromeDeductions = harvestTransactions.filter(t => t.desc.toLowerCase().includes('jerome')).reduce((a,b) => a+b.amount, 0);
-    let jenniferDeductions = harvestTransactions.filter(t => t.desc.toLowerCase().includes('jennifer')).reduce((a,b) => a+b.amount, 0);
-
-    let jeromeNet = jeromeBase - jeromeDeductions;
-    let jenniferNet = jenniferBase - jenniferDeductions;
-
-    document.getElementById("sumJerome").innerText = formatAmount(jeromeNet);
-    document.getElementById("sumJennifer").innerText = formatAmount(jenniferNet);
-    document.getElementById("sumCombined").innerText = formatAmount(jeromeNet + jenniferNet);
+    let balances = getPartnerBalances();
+    document.getElementById("sumJerome").innerText = formatAmount(balances.jerome);
+    document.getElementById("sumJennifer").innerText = formatAmount(balances.jennifer);
+    document.getElementById("sumCombined").innerText = formatAmount(balances.jerome + balances.jennifer);
 
     let totalHarvestRev = harvests.reduce((a, b) => a + b.amount, 0);
     let totalHarvestExp = harvestTransactions.reduce((a, b) => a + b.amount, 0);
@@ -393,14 +394,20 @@ function render(){
     document.getElementById("totalBizProfit").innerText = formatAmount(totalHarvestRev - totalHarvestExp);
 
     let inc = fInc.reduce((a,b)=>a+b.amount,0), bud = fExp.reduce((a,b)=>a+b.amount,0), unb = fUn.reduce((a,b)=>a+b.amount,0), lia = fLia.reduce((a,b)=>a+b.amount,0), rem = inc-(bud+unb+lia);
-    
     document.getElementById("totalIncome").innerText=formatAmount(inc); 
     document.getElementById("totalBudgeted").innerText=formatAmount(bud);
     document.getElementById("totalUnbudgeted").innerText=formatAmount(unb); 
     document.getElementById("totalLiability").innerText=formatAmount(lia); 
     document.getElementById("totalSavings").innerText=formatAmount(rem);
 
-    const row = (d,i,t)=>`<tr><td>${d.date}</td><td>${d.contributor || '-'}</td><td>${d.desc||d.cat}</td><td>${formatAmount(d.amount)}</td><td><button onclick="deleteItem('${t}',${i})" style="color:var(--danger);border:none;background:none;cursor:pointer;">🗑</button></td></tr>`;
+    const row = (d,i,t) => {
+        let descValue = d.desc || d.cat || '-';
+        if(t === 'con') {
+            return `<tr><td>${d.date}</td><td>${d.contributor}</td><td>${descValue}</td><td>${formatAmount(d.amount)}</td><td><button class="action-delete" onclick="deleteItem('${t}',${i})">Delete</button></td></tr>`;
+        }
+        return `<tr><td>${d.date}</td><td>${descValue}</td><td>${formatAmount(d.amount)}</td><td><button class="action-delete" onclick="deleteItem('${t}',${i})">Delete</button></td></tr>`;
+    };
+
     document.getElementById("incomeTable").innerHTML=fInc.map((d,i)=>row(d,i,'income')).join('');
     document.getElementById("expenseTable").innerHTML=fExp.map((d,i)=>row(d,i,'exp')).join('');
     document.getElementById("unTable").innerHTML=fUn.map((d,i)=>row(d,i,'un')).join('');
@@ -408,14 +415,9 @@ function render(){
     document.getElementById("conTable").innerHTML=fCon.map((d,i)=>row(d,i,'con')).join('');
     
     const filter = document.getElementById('harvestViewFilter');
-    const curVal = filter.value;
     filter.innerHTML = '<option value="all">Show All Accounts</option>' + harvests.map(h => `<option value="${h.id}">${h.desc}</option>`).join('');
-    filter.value = curVal || 'all';
 
-    renderHarvests();
-    renderNotes();
-    updateChart(bud, unb, lia, rem); 
-    updateSavingsTab();
+    renderHarvests(); renderNotes(); updateChart(bud, unb, lia, rem); updateSavingsTab();
 }
 
 function filterData(data){
@@ -441,7 +443,7 @@ function renderHarvests() {
                     <div><h4 style="margin:0; color:var(--primary);">${acc.desc}</h4><div style="font-size:12px; color:#888;">Revenue: ${formatAmount(acc.amount)}</div><div onclick="deleteItem('har_acc', ${actualIndex})" style="font-size:10px; color:var(--danger); cursor:pointer; text-decoration:underline; margin-top:4px; font-weight:bold;">Delete Account</div></div>
                     <div style="text-align:right;"><div style="font-size:11px; color:#888;">Net Profit</div><div style="font-size:18px; font-weight:bold; color:${profit >= 0 ? 'var(--success)' : 'var(--danger)'}">${formatAmount(profit)}</div></div>
                 </div>
-                <table style="width:100%; font-size:12px;"><tbody>${trans.map((t) => `<tr><td>${t.date}</td><td>${t.desc}</td><td style="color:var(--danger)">-${formatAmount(t.amount)}</td><td style="text-align:right;"><button onclick="deleteItem('har_trans', ${harvestTransactions.indexOf(t)})" style="border:none; background:none; cursor:pointer;">✕</button></td></tr>`).join('')}</tbody></table>
+                <table style="width:100%; font-size:12px;"><tbody>${trans.map((t) => `<tr><td>${t.date}</td><td>${t.desc}</td><td style="color:var(--danger)">-${formatAmount(t.amount)}</td><td style="text-align:right;"><button class="action-delete" onclick="deleteItem('har_trans', ${harvestTransactions.indexOf(t)})">Delete</button></td></tr>`).join('')}</tbody></table>
             </div>`;
     });
 }
@@ -450,24 +452,16 @@ function renderNotes() {
     const container = document.getElementById('notesContainer');
     const search = document.getElementById("searchInput").value.toLowerCase();
     container.innerHTML = '';
-    
-    // Sort logic: Pinned first, then by date descending
-    const sortedNotes = [...businessNotes].sort((a, b) => {
-        if (a.pinned && !b.pinned) return -1;
-        if (!a.pinned && b.pinned) return 1;
-        return b.id - a.id;
-    });
-
+    const sortedNotes = [...businessNotes].sort((a, b) => (a.pinned === b.pinned) ? b.id - a.id : a.pinned ? -1 : 1);
     sortedNotes.filter(n => n.text.toLowerCase().includes(search)).forEach((note) => {
-        const originalIndex = businessNotes.indexOf(note);
         container.innerHTML += `
             <div class="note-card ${note.pinned ? 'pinned' : ''}">
                 <div class="note-date">${note.date} ${note.pinned ? '📌' : ''}</div>
                 <div class="note-text">${note.text}</div>
                 <div class="note-actions">
-                    <div class="note-pin" onclick="togglePin(${note.id})">${note.pinned ? '📍 Unpin' : '📌 Pin to Top'}</div>
-                    <div class="note-edit" onclick="editNote(${note.id})">Edit Note</div>
-                    <div class="note-delete" onclick="deleteItem('note', ${originalIndex})">Delete Note</div>
+                    <div class="note-pin" onclick="togglePin(${note.id})">${note.pinned ? '📍 Unpin' : '📌 Pin'}</div>
+                    <div class="note-edit" onclick="editNote(${note.id})">Edit</div>
+                    <div class="note-delete" onclick="deleteItem('note', ${businessNotes.indexOf(note)})">Delete</div>
                 </div>
             </div>`;
     });
@@ -498,6 +492,16 @@ function updateChart(b,u,l,r){
     const ctx=document.getElementById('budgetChart').getContext('2d');
     if(myChart)myChart.destroy();
     myChart=new Chart(ctx,{type:'doughnut',data:{labels:['Budgeted','Unbudgeted','Debt','Saved'],datasets:[{data:[b,u,l,r>0?r:0],backgroundColor:['#2c7be5','#e17055','#6c5ce7','#00cec9'],borderWidth:0}]},options:{maintainAspectRatio:false,plugins:{legend:{position:'bottom'}}}});
+}
+
+function togglePin(id) {
+    const idx = businessNotes.findIndex(n => n.id === id);
+    if(idx !== -1) { businessNotes[idx].pinned = !businessNotes[idx].pinned; save(); }
+}
+
+function editNote(id) {
+    const note = businessNotes.find(n => n.id === id);
+    if(note) { editNoteId = id; document.getElementById('modalNoteBody').value = note.text; openAddModal('note'); }
 }
 
 function save(){
