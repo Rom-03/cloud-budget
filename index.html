@@ -1,0 +1,523 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Cloud Budget - Business Edition</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        :root { 
+            --primary: #2c7be5; --success: #00b894; --danger: #ff4757; --warning: #e17055; 
+            --dark: #12141d; --bg: #f4f7fc; --card-bg: white; --text: #333; 
+            --border: #dee2e6; --shadow: 0 4px 20px rgba(0,0,0,0.08); 
+            --sidebar-width: 240px;
+        }
+        [data-theme="dark"] { 
+            --bg: #1a1c23; --card-bg: #242731; --text: #eeeeee; --border: #323541; 
+            --shadow: 0 4px 20px rgba(0,0,0,0.3); 
+        }
+
+        body { font-family: 'Segoe UI', sans-serif; background: var(--bg); margin: 0; color: var(--text); overflow-x: hidden; transition: 0.3s; }
+
+        #toast {
+            position: fixed; top: 20px; left: 50%; transform: translate(-50%, -150%);
+            padding: 12px 30px; color: white; border-radius: 50px; box-shadow: 0 10px 25px rgba(0,0,0,0.2); 
+            z-index: 9999; transition: transform 0.5s; font-weight: 600; font-size: 14px; pointer-events: none;
+        }
+        #toast.show { transform: translate(-50%, 0); }
+
+        .sidebar {
+            position: fixed; left: calc(-1 * var(--sidebar-width)); top: 0; height: 100%;
+            width: var(--sidebar-width); background: var(--card-bg); border-right: 1px solid var(--border);
+            transition: transform 0.3s ease; z-index: 1001; padding-top: 20px;
+        }
+        .sidebar.open { transform: translateX(var(--sidebar-width)); }
+        .sidebar-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.4); display: none; z-index: 1000; backdrop-filter: blur(2px); }
+        .sidebar-overlay.active { display: block; }
+
+        .nav-group { margin-top: 20px; }
+        .nav-label { padding: 10px 25px; font-size: 11px; text-transform: uppercase; color: #888; font-weight: 700; letter-spacing: 1px; }
+        .nav-item { padding: 12px 25px; font-size: 14px; cursor: pointer; color: var(--text); font-weight: 600; display: flex; align-items: center; gap: 10px; transition: 0.2s; }
+        .nav-item:hover { background: rgba(44, 123, 229, 0.05); }
+        .nav-item.selected { color: var(--primary); background: rgba(44, 123, 229, 0.08); border-left: 4px solid var(--primary); }
+
+        header { background: linear-gradient(135deg, var(--primary), #1a5bb4); color: white; padding: 0 20px; height: 70px; display: flex; align-items: center; justify-content: space-between; position: sticky; top: 0; z-index: 900; }
+        .hamburger { width: 40px; height: 40px; display: flex; flex-direction: column; justify-content: center; align-items: center; gap: 5px; cursor: pointer; background: rgba(255,255,255,0.1); border: none; border-radius: 8px; }
+        .hamburger span { width: 22px; height: 2px; background: white; border-radius: 2px; }
+
+        .main-content { padding: 20px; max-width: 1000px; margin: 0 auto; }
+        .controls-bar { background: var(--card-bg); padding: 15px; border-radius: 12px; display: flex; gap: 10px; align-items: center; margin-bottom: 20px; box-shadow: var(--shadow); }
+        
+        .grid-stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 12px; margin-bottom: 25px; }
+        .card { padding: 12px; border-radius: 10px; font-size: 10px; color: white; text-align: center; }
+        .card span { font-size: 16px; font-weight: 700; display: block; margin-top: 5px; }
+        .income { background: var(--success); } .expense { background: var(--danger); } .unbudget { background: var(--warning); }
+        .liability { background: #6c5ce7; } .savings { background: #00cec9; } .biz-profit { background: #4b6584; }
+
+        .table-container { width: 100%; overflow-x: auto; border-radius: 12px; box-shadow: var(--shadow); background: var(--card-bg); margin-bottom: 30px; }
+        table { width: 100%; border-collapse: collapse; }
+        th, td { padding: 15px; text-align: left; border-bottom: 1px solid var(--border); font-size: 14px; }
+        
+        .modal-overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.6); z-index: 2000; align-items: center; justify-content: center; backdrop-filter: blur(3px); }
+        .modal-content { background: var(--card-bg); padding: 25px; border-radius: 15px; width: 320px; }
+        input, select, textarea { padding: 12px; margin: 8px 0; width: 100%; border-radius: 8px; border: 1px solid var(--border); background: var(--card-bg); color: var(--text); box-sizing: border-box; font-family: inherit; }
+        
+        .confirm-overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.7); z-index: 3000; align-items: center; justify-content: center; }
+        .confirm-box { background: var(--card-bg); width: 300px; padding: 25px; border-radius: 16px; text-align: center; }
+        
+        .add-btn { background: var(--primary); color: white; border: none; padding: 10px 15px; border-radius: 8px; cursor: pointer; font-weight: 600; font-size: 12px; }
+        .section { display: none; }
+        .section.active { display: block; animation: fadeIn 0.3s ease; }
+        @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+
+        .sum-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 15px; margin-bottom: 20px; }
+        .sum-card { background: var(--card-bg); padding: 15px; border-radius: 12px; border: 1px solid var(--border); text-align: center; }
+        .sum-card div:first-child { font-size: 11px; color: #888; font-weight: bold; text-transform: uppercase; }
+        .sum-card div:last-child { font-size: 18px; font-weight: 800; margin-top: 5px; }
+
+        /* Notes Styling */
+        .note-card { background: var(--card-bg); border: 1px solid var(--border); padding: 15px; border-radius: 12px; margin-bottom: 15px; position: relative; }
+        .note-card.pinned { border: 2px solid var(--primary); background: rgba(44, 123, 229, 0.03); }
+        .note-date { font-size: 11px; color: #888; margin-bottom: 8px; }
+        .note-text { font-size: 14px; white-space: pre-wrap; line-height: 1.5; }
+        .note-actions { display: flex; gap: 15px; margin-top: 10px; }
+        .note-delete { color: var(--danger); font-size: 11px; cursor: pointer; font-weight: bold; text-decoration: underline; }
+        .note-edit { color: var(--primary); font-size: 11px; cursor: pointer; font-weight: bold; text-decoration: underline; }
+        .note-pin { color: var(--warning); font-size: 11px; cursor: pointer; font-weight: bold; text-decoration: underline; }
+
+        .harvest-filter-box { background: var(--card-bg); padding: 15px; border-radius: 12px; margin-bottom: 20px; border: 1px dashed var(--primary); display: flex; align-items: center; gap: 15px; }
+    </style>
+</head>
+<body>
+
+<div id="toast">Success!</div>
+<div class="sidebar-overlay" id="overlay" onclick="toggleSidebar()"></div>
+
+<nav class="sidebar" id="sidebar">
+    <div style="padding: 20px 25px;"><h2 style="margin:0; font-size: 18px; color: var(--primary);">Cloud Budget</h2></div>
+    <div class="nav-group">
+        <div class="nav-label">General</div>
+        <div class="nav-item selected" onclick="switchSection('overview', this)">📊 Overview</div>
+        <div class="nav-item" onclick="switchSection('income', this)">💰 Income</div>
+        <div class="nav-item" onclick="switchSection('budget', this)">📝 Budgeted</div>
+        <div class="nav-item" onclick="switchSection('unbudget', this)">💸 Unbudgeted</div>
+        <div class="nav-item" onclick="switchSection('liability', this)">💳 Liability</div>
+        <div class="nav-item" onclick="switchSection('savings', this)">📈 Savings History</div>
+    </div>
+    <div class="nav-group">
+        <div class="nav-label">Partnership</div>
+        <div class="nav-item" onclick="switchSection('contribution', this)">🤝 Contribution</div>
+        <div class="nav-item" onclick="switchSection('harvest', this)">🌾 Harvest Accounts</div>
+        <div class="nav-item" onclick="switchSection('business-notes', this)">📝 Business Note</div>
+    </div>
+</nav>
+
+<div id="loginOverlay" style="position:fixed; inset:0; background:var(--bg); display:flex; align-items:center; justify-content:center; z-index:9999;">
+    <div style="background:var(--card-bg); padding:40px; border-radius:15px; box-shadow:var(--shadow); text-align:center; width:300px;">
+        <h2>Access</h2>
+        <input type="password" id="passInput" placeholder="Password">
+        <button onclick="checkLogin()" style="width:100%; padding:10px; background:var(--primary); color:white; border:none; border-radius:8px; margin-top:10px; cursor:pointer;">Unlock</button>
+    </div>
+</div>
+
+<div id="mainApp" style="display:none;">
+    <header>
+        <div class="header-left" style="display:flex; align-items:center; gap:15px;">
+            <button class="hamburger" onclick="toggleSidebar()"><span></span><span></span><span></span></button>
+            <div style="font-weight:700;">Financial Tracker</div>
+        </div>
+        <div class="header-right" style="display:flex; align-items:center; gap:10px;">
+            <button onclick="toggleTheme()" id="themeBtn" style="background:rgba(255,255,255,0.2); border:none; color:white; padding:5px 10px; border-radius:15px; cursor:pointer; font-size:11px;">🌙 Dark</button>
+            <button onclick="resetAllData()" style="background:rgba(255, 165, 0, 0.3); border:none; color:white; padding:5px 10px; border-radius:15px; cursor:pointer; font-size:11px;">⚠️ Reset Data</button>
+            <button onclick="logout()" style="background:rgba(255, 71, 87, 0.2); border:none; color:white; padding:5px 10px; border-radius:15px; cursor:pointer; font-size:11px;">Logout</button>
+        </div>
+    </header>
+
+    <div class="main-content">
+        <div class="controls-bar">
+            <select id="month" style="width:110px; margin:0;"><option value="all">Month</option></select>
+            <select id="year" style="width:90px; margin:0;"></select>
+            <input type="text" id="searchInput" placeholder="Search entries..." oninput="render()" style="margin:0; flex:1;">
+        </div>
+
+        <div id="overview" class="section active">
+            <div class="grid-stats">
+                <div class="card income">Income<br><span id="totalIncome">₱0.00</span></div>
+                <div class="card biz-profit">Biz Profit<br><span id="totalBizProfit">₱0.00</span></div>
+                <div class="card expense">Budgeted<br><span id="totalBudgeted">₱0.00</span></div>
+                <div class="card unbudget">Unbudgeted<br><span id="totalUnbudgeted">₱0.00</span></div>
+                <div class="card liability">Liability<br><span id="totalLiability">₱0.00</span></div>
+                <div class="card savings">Saved<br><span id="totalSavings">₱0.00</span></div>
+            </div>
+            <div style="background:var(--card-bg); padding:20px; border-radius:12px; height:320px; box-shadow:var(--shadow);"><canvas id="budgetChart"></canvas></div>
+        </div>
+
+        <div id="contribution" class="section">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:15px;">
+                <h3>Partner Contributions</h3>
+                <button class="add-btn" onclick="openAddModal('contribution')">+ Add Contribution</button>
+            </div>
+            <div class="sum-grid">
+                <div class="sum-card"><div>Jerome Net</div><div id="sumJerome" style="color:var(--primary)">₱0.00</div></div>
+                <div class="sum-card"><div>Jennifer Net</div><div id="sumJennifer" style="color:var(--success)">₱0.00</div></div>
+                <div class="sum-card"><div>Pool Balance</div><div id="sumCombined" style="color:#6c5ce7">₱0.00</div></div>
+            </div>
+            <div class="table-container">
+                <table>
+                    <thead><tr><th>Date</th><th>Contributor</th><th>Description</th><th>Amount</th><th>Action</th></tr></thead>
+                    <tbody id="conTable"></tbody>
+                </table>
+            </div>
+        </div>
+
+        <div id="harvest" class="section">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:15px;">
+                <h3>Harvest Accounts</h3>
+                <div style="display:flex; gap:10px;">
+                    <button class="add-btn" style="background:var(--success)" onclick="openAddModal('harvest')">+ New Harvest</button>
+                    <button class="add-btn" style="background:var(--danger)" onclick="openAddModal('harvest_expense')">+ Add Expense</button>
+                </div>
+            </div>
+            <div class="sum-grid">
+                <div class="sum-card"><div>Gross Harvest</div><div id="sumHarvestRev" style="color:var(--primary)">₱0.00</div></div>
+                <div class="sum-card"><div>Total Expenses</div><div id="sumHarvestExp" style="color:var(--danger)">₱0.00</div></div>
+                <div class="sum-card"><div>Account Profit</div><div id="sumHarvestProfit" style="color:var(--success)">₱0.00</div></div>
+            </div>
+            <div class="harvest-filter-box">
+                <select id="harvestViewFilter" onchange="renderHarvests()" style="flex:1; margin:0;"></select>
+            </div>
+            <div id="harvestContainer"></div>
+        </div>
+
+        <div id="business-notes" class="section">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:15px;">
+                <h3>Business Note</h3>
+                <button class="add-btn" onclick="openAddModal('note')">+ New Note</button>
+            </div>
+            <div id="notesContainer"></div>
+        </div>
+
+        <div id="income" class="section">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:15px;"><h3>Income</h3><button class="add-btn" onclick="openAddModal('income')">+ Add Income</button></div>
+            <div class="table-container"><table><thead><tr><th>Date</th><th>Description</th><th>Amount</th><th>Action</th></tr></thead><tbody id="incomeTable"></tbody></table></div>
+        </div>
+        <div id="budget" class="section">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:15px;"><h3>Budgeted Expenses</h3><button class="add-btn" onclick="openAddModal('budget')">+ Add Expense</button></div>
+            <div class="table-container"><table><thead><tr><th>Date</th><th>Category</th><th>Amount</th><th>Action</th></tr></thead><tbody id="expenseTable"></tbody></table></div>
+        </div>
+        <div id="unbudget" class="section">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:15px;"><h3>Unbudgeted Entries</h3><button class="add-btn" onclick="openAddModal('unbudget')">+ Add Entry</button></div>
+            <div class="table-container"><table><thead><tr><th>Date</th><th>Description</th><th>Amount</th><th>Action</th></tr></thead><tbody id="unTable"></tbody></table></div>
+        </div>
+        <div id="liability" class="section">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:15px;"><h3>Liabilities</h3><button class="add-btn" onclick="openAddModal('liability')">+ Add Debt</button></div>
+            <div class="table-container"><table><thead><tr><th>Date</th><th>Description</th><th>Amount</th><th>Action</th></tr></thead><tbody id="liaTable"></tbody></table></div>
+        </div>
+        <div id="savings" class="section">
+            <h3>Savings Summary (Yearly)</h3>
+            <div class="table-container"><table><thead><tr><th>Month</th><th>Saved Amount</th></tr></thead><tbody id="savingsTable"></tbody><tfoot><tr style="font-weight:bold; background:rgba(0,0,0,0.05);"><td>Running Total</td><td id="overallSavings">₱0.00</td></tr></tfoot></table></div>
+        </div>
+    </div>
+</div>
+
+<div id="addModal" class="modal-overlay">
+    <div class="modal-content">
+        <h3 id="modalTitle">Add Entry</h3>
+        <div id="standardFields">
+            <input type="date" id="modalDate">
+            <div id="modalContributorBox" style="display:none;">
+                <select id="modalContributor"><option value="Jerome">Jerome</option><option value="Jennifer">Jennifer</option></select>
+            </div>
+            <div id="modalCatBox" style="display:none;"><select id="modalCat"><option>FOOD</option><option>RENT</option><option>UTILITIES</option><option>INTERNET</option><option>TRANSPORT</option><option>GROCERY</option><option>MISC</option></select></div>
+            <div id="modalAccountBox" style="display:none;"><select id="modalAccountSelect"></select></div>
+            <input type="text" id="modalDesc" placeholder="Description">
+            <p id="hintText" style="font-size: 10px; color: var(--warning); margin: 0; display:none;">Tip: Type "Jerome" or "Jennifer" in desc to deduct from their contribution.</p>
+            <input type="number" id="modalAmount" placeholder="Amount (₱)">
+        </div>
+        <div id="noteFields" style="display:none;">
+            <textarea id="modalNoteBody" rows="6" placeholder="Write your business notes here..."></textarea>
+        </div>
+        <div style="display:flex; gap:10px; margin-top:20px;">
+            <button onclick="closeModal('addModal')" style="flex:1; padding:12px; border-radius:8px; border:none; background:#eee;">Cancel</button>
+            <button onclick="processAdd()" style="flex:1; padding:12px; border-radius:8px; border:none; background:var(--primary); color:white;">Save</button>
+        </div>
+    </div>
+</div>
+
+<div id="deleteConfirmModal" class="confirm-overlay"><div class="confirm-box"><h3>Delete Entry?</h3><div style="display:flex; gap:10px; margin-top:20px;"><button onclick="closeConfirm()" style="flex:1; padding:10px; border-radius:8px; border:none;">Cancel</button><button id="confirmBtn" style="flex:1; padding:10px; border-radius:8px; border:none; background:var(--danger); color:white;">Delete</button></div></div></div>
+
+<script>
+let incomes=[], expenses=[], unbudgeted=[], liabilities=[], harvests=[], harvestTransactions=[], contributions=[], businessNotes=[], myChart, currentAddType = '', deleteTgt={}, editNoteId=null;
+const fullMonths=["January","February","March","April","May","June","July","August","September","October","November","December"];
+
+function applyTheme(t) { document.body.setAttribute("data-theme", t); document.getElementById("themeBtn").innerText = t === "dark" ? "☀️ Light" : "🌙 Dark"; localStorage.setItem("theme", t); }
+function toggleTheme(){ applyTheme(document.body.getAttribute("data-theme") === "dark" ? "light" : "dark"); render(); }
+function toggleSidebar(){ document.getElementById('sidebar').classList.toggle('open'); document.getElementById('overlay').classList.toggle('active'); }
+function closeModal(id){ document.getElementById(id).style.display="none"; editNoteId = null; }
+function closeConfirm(){ document.getElementById('deleteConfirmModal').style.display='none'; }
+function logout() { localStorage.removeItem("isLoggedIn"); location.reload(); }
+function formatAmount(v){ return (v < 0 ? "-₱" : "₱") + Math.abs(v).toLocaleString(undefined,{minimumFractionDigits:2}); }
+function showToast(m) { const t = document.getElementById("toast"); t.innerText = m; t.classList.add("show"); setTimeout(() => t.classList.remove("show"), 2000); }
+
+function resetAllData() { if(confirm("Are you sure?")) { localStorage.clear(); location.reload(); } }
+function checkLogin(){ if(document.getElementById("passInput").value==="1234"){ localStorage.setItem("isLoggedIn", "true"); document.getElementById("loginOverlay").style.display="none"; document.getElementById("mainApp").style.display="block"; load(); } }
+
+function switchSection(id, el){
+    document.querySelectorAll('.section').forEach(s=>s.classList.remove('active')); 
+    document.getElementById(id).classList.add('active');
+    document.querySelectorAll('.nav-item').forEach(n=>n.classList.remove('selected')); 
+    if(el) el.classList.add('selected');
+    if(window.innerWidth<768) toggleSidebar(); 
+    render();
+}
+
+const monthSel=document.getElementById("month"), yearSel=document.getElementById("year");
+fullMonths.forEach((m, i) => monthSel.innerHTML+=`<option value="${i}">${m}</option>`);
+for(let y=2024; y<=2035; y++) yearSel.innerHTML+=`<option>${y}</option>`;
+yearSel.value=new Date().getFullYear();
+monthSel.onchange=render; yearSel.onchange=render;
+
+function openAddModal(type) {
+    currentAddType = type;
+    document.getElementById('modalCatBox').style.display = type==='budget'?'block':'none';
+    document.getElementById('modalAccountBox').style.display = type==='harvest_expense'?'block':'none';
+    document.getElementById('modalContributorBox').style.display = type==='contribution'?'block':'none';
+    document.getElementById('hintText').style.display = type==='harvest_expense'?'block':'none';
+
+    const standardFields = document.getElementById('standardFields');
+    const noteFields = document.getElementById('noteFields');
+    
+    if(type === 'note') {
+        standardFields.style.display = 'none';
+        noteFields.style.display = 'block';
+        if(!editNoteId) document.getElementById('modalNoteBody').value = '';
+    } else {
+        standardFields.style.display = 'block';
+        noteFields.style.display = 'none';
+        if(type === 'harvest_expense'){
+            const sel = document.getElementById('modalAccountSelect');
+            sel.innerHTML = harvests.map(h => `<option value="${h.id}">${h.desc}</option>`).join('');
+            if(harvests.length === 0) { alert("Create a Harvest Account first."); return; }
+        }
+        document.getElementById('modalDate').value = new Date().toISOString().split('T')[0];
+        document.getElementById('modalDesc').value = ''; 
+        document.getElementById('modalAmount').value = '';
+    }
+
+    document.getElementById('modalTitle').innerText = (editNoteId ? "Edit " : "Add ") + type.replace('-', ' ').toUpperCase();
+    document.getElementById('addModal').style.display = 'flex';
+}
+
+function editNote(id) {
+    const note = businessNotes.find(n => n.id === id);
+    if(note) {
+        editNoteId = id;
+        document.getElementById('modalNoteBody').value = note.text;
+        openAddModal('note');
+    }
+}
+
+function togglePin(id) {
+    const idx = businessNotes.findIndex(n => n.id === id);
+    if(idx !== -1) {
+        businessNotes[idx].pinned = !businessNotes[idx].pinned;
+        save();
+    }
+}
+
+function processAdd() {
+    if(currentAddType === 'note') {
+        const body = document.getElementById('modalNoteBody').value;
+        if(!body) return;
+        if(editNoteId) {
+            const idx = businessNotes.findIndex(n => n.id === editNoteId);
+            businessNotes[idx].text = body;
+            businessNotes[idx].date = new Date().toLocaleString() + " (Edited)";
+            editNoteId = null;
+        } else {
+            businessNotes.push({ id: Date.now(), date: new Date().toLocaleString(), text: body, pinned: false });
+        }
+    } else {
+        const date = document.getElementById('modalDate').value, desc = document.getElementById('modalDesc').value, cat = document.getElementById('modalCat').value;
+        const amt = Number(document.getElementById('modalAmount').value), harvestId = document.getElementById('modalAccountSelect').value, contributor = document.getElementById('modalContributor').value;
+        if(!date || !amt) return;
+        if(currentAddType === 'income') incomes.push({date, desc, amount: amt});
+        else if(currentAddType === 'budget') expenses.push({date, cat: cat, amount: amt});
+        else if(currentAddType === 'unbudget') unbudgeted.push({date, desc, amount: amt});
+        else if(currentAddType === 'liability') liabilities.push({date, desc, amount: amt});
+        else if(currentAddType === 'contribution') contributions.push({date, contributor, desc, amount: amt});
+        else if(currentAddType === 'harvest') harvests.push({id: Date.now().toString(), date, desc, amount: amt});
+        else if(currentAddType === 'harvest_expense') harvestTransactions.push({date, desc, amount: amt, harvestId: harvestId});
+    }
+    save(); closeModal('addModal'); showToast("Saved!");
+}
+
+function deleteItem(type, i){ deleteTgt={type, idx:i}; document.getElementById('deleteConfirmModal').style.display='flex'; }
+
+document.getElementById('confirmBtn').onclick=()=>{
+    if(deleteTgt.type === 'income') incomes.splice(deleteTgt.idx, 1);
+    else if(deleteTgt.type === 'exp') expenses.splice(deleteTgt.idx, 1);
+    else if(deleteTgt.type === 'un') unbudgeted.splice(deleteTgt.idx, 1);
+    else if(deleteTgt.type === 'lia') liabilities.splice(deleteTgt.idx, 1);
+    else if(deleteTgt.type === 'con') contributions.splice(deleteTgt.idx, 1);
+    else if(deleteTgt.type === 'note') businessNotes.splice(deleteTgt.idx, 1);
+    else if(deleteTgt.type === 'har_acc') {
+        const accId = harvests[deleteTgt.idx].id;
+        harvestTransactions = harvestTransactions.filter(t => t.harvestId !== accId);
+        harvests.splice(deleteTgt.idx, 1);
+    }
+    else if(deleteTgt.type === 'har_trans') harvestTransactions.splice(deleteTgt.idx, 1);
+    save(); closeConfirm();
+};
+
+function render(){
+    let fInc=filterData(incomes), fExp=filterData(expenses), fUn=filterData(unbudgeted), fLia=filterData(liabilities), fCon=filterData(contributions);
+    
+    let jeromeBase = contributions.filter(c => c.contributor === 'Jerome').reduce((a,b) => a + b.amount, 0);
+    let jenniferBase = contributions.filter(c => c.contributor === 'Jennifer').reduce((a,b) => a + b.amount, 0);
+    let jeromeDeductions = harvestTransactions.filter(t => t.desc.toLowerCase().includes('jerome')).reduce((a,b) => a+b.amount, 0);
+    let jenniferDeductions = harvestTransactions.filter(t => t.desc.toLowerCase().includes('jennifer')).reduce((a,b) => a+b.amount, 0);
+
+    let jeromeNet = jeromeBase - jeromeDeductions;
+    let jenniferNet = jenniferBase - jenniferDeductions;
+
+    document.getElementById("sumJerome").innerText = formatAmount(jeromeNet);
+    document.getElementById("sumJennifer").innerText = formatAmount(jenniferNet);
+    document.getElementById("sumCombined").innerText = formatAmount(jeromeNet + jenniferNet);
+
+    let totalHarvestRev = harvests.reduce((a, b) => a + b.amount, 0);
+    let totalHarvestExp = harvestTransactions.reduce((a, b) => a + b.amount, 0);
+    document.getElementById("sumHarvestRev").innerText = formatAmount(totalHarvestRev);
+    document.getElementById("sumHarvestExp").innerText = formatAmount(totalHarvestExp);
+    document.getElementById("sumHarvestProfit").innerText = formatAmount(totalHarvestRev - totalHarvestExp);
+    document.getElementById("totalBizProfit").innerText = formatAmount(totalHarvestRev - totalHarvestExp);
+
+    let inc = fInc.reduce((a,b)=>a+b.amount,0), bud = fExp.reduce((a,b)=>a+b.amount,0), unb = fUn.reduce((a,b)=>a+b.amount,0), lia = fLia.reduce((a,b)=>a+b.amount,0), rem = inc-(bud+unb+lia);
+    
+    document.getElementById("totalIncome").innerText=formatAmount(inc); 
+    document.getElementById("totalBudgeted").innerText=formatAmount(bud);
+    document.getElementById("totalUnbudgeted").innerText=formatAmount(unb); 
+    document.getElementById("totalLiability").innerText=formatAmount(lia); 
+    document.getElementById("totalSavings").innerText=formatAmount(rem);
+
+    const row = (d,i,t)=>`<tr><td>${d.date}</td><td>${d.contributor || '-'}</td><td>${d.desc||d.cat}</td><td>${formatAmount(d.amount)}</td><td><button onclick="deleteItem('${t}',${i})" style="color:var(--danger);border:none;background:none;cursor:pointer;">🗑</button></td></tr>`;
+    document.getElementById("incomeTable").innerHTML=fInc.map((d,i)=>row(d,i,'income')).join('');
+    document.getElementById("expenseTable").innerHTML=fExp.map((d,i)=>row(d,i,'exp')).join('');
+    document.getElementById("unTable").innerHTML=fUn.map((d,i)=>row(d,i,'un')).join('');
+    document.getElementById("liaTable").innerHTML=fLia.map((d,i)=>row(d,i,'lia')).join('');
+    document.getElementById("conTable").innerHTML=fCon.map((d,i)=>row(d,i,'con')).join('');
+    
+    const filter = document.getElementById('harvestViewFilter');
+    const curVal = filter.value;
+    filter.innerHTML = '<option value="all">Show All Accounts</option>' + harvests.map(h => `<option value="${h.id}">${h.desc}</option>`).join('');
+    filter.value = curVal || 'all';
+
+    renderHarvests();
+    renderNotes();
+    updateChart(bud, unb, lia, rem); 
+    updateSavingsTab();
+}
+
+function filterData(data){
+    const s=document.getElementById("searchInput").value.toLowerCase();
+    return data.filter(d=>{
+        let dt=new Date(d.date), mMatch = monthSel.value === "all" || dt.getMonth() == monthSel.value, yMatch = dt.getFullYear() == yearSel.value;
+        return mMatch && yMatch && (d.desc||d.cat||d.contributor||"").toLowerCase().includes(s);
+    });
+}
+
+function renderHarvests() {
+    const container = document.getElementById('harvestContainer');
+    const filterId = document.getElementById('harvestViewFilter').value;
+    container.innerHTML = '';
+    const displayList = filterId === 'all' ? harvests : harvests.filter(h => h.id === filterId);
+    displayList.forEach((acc) => {
+        const actualIndex = harvests.findIndex(h => h.id === acc.id);
+        const trans = harvestTransactions.filter(t => t.harvestId === acc.id);
+        const totalExp = trans.reduce((a, b) => a + b.amount, 0), profit = acc.amount - totalExp;
+        container.innerHTML += `
+            <div style="background:var(--card-bg); border:1px solid var(--border); border-radius:12px; padding:15px; margin-bottom:20px; box-shadow:var(--shadow);">
+                <div style="display:flex; justify-content:space-between; align-items:start; border-bottom:1px solid var(--border); padding-bottom:10px; margin-bottom:10px;">
+                    <div><h4 style="margin:0; color:var(--primary);">${acc.desc}</h4><div style="font-size:12px; color:#888;">Revenue: ${formatAmount(acc.amount)}</div><div onclick="deleteItem('har_acc', ${actualIndex})" style="font-size:10px; color:var(--danger); cursor:pointer; text-decoration:underline; margin-top:4px; font-weight:bold;">Delete Account</div></div>
+                    <div style="text-align:right;"><div style="font-size:11px; color:#888;">Net Profit</div><div style="font-size:18px; font-weight:bold; color:${profit >= 0 ? 'var(--success)' : 'var(--danger)'}">${formatAmount(profit)}</div></div>
+                </div>
+                <table style="width:100%; font-size:12px;"><tbody>${trans.map((t) => `<tr><td>${t.date}</td><td>${t.desc}</td><td style="color:var(--danger)">-${formatAmount(t.amount)}</td><td style="text-align:right;"><button onclick="deleteItem('har_trans', ${harvestTransactions.indexOf(t)})" style="border:none; background:none; cursor:pointer;">✕</button></td></tr>`).join('')}</tbody></table>
+            </div>`;
+    });
+}
+
+function renderNotes() {
+    const container = document.getElementById('notesContainer');
+    const search = document.getElementById("searchInput").value.toLowerCase();
+    container.innerHTML = '';
+    
+    // Sort logic: Pinned first, then by date descending
+    const sortedNotes = [...businessNotes].sort((a, b) => {
+        if (a.pinned && !b.pinned) return -1;
+        if (!a.pinned && b.pinned) return 1;
+        return b.id - a.id;
+    });
+
+    sortedNotes.filter(n => n.text.toLowerCase().includes(search)).forEach((note) => {
+        const originalIndex = businessNotes.indexOf(note);
+        container.innerHTML += `
+            <div class="note-card ${note.pinned ? 'pinned' : ''}">
+                <div class="note-date">${note.date} ${note.pinned ? '📌' : ''}</div>
+                <div class="note-text">${note.text}</div>
+                <div class="note-actions">
+                    <div class="note-pin" onclick="togglePin(${note.id})">${note.pinned ? '📍 Unpin' : '📌 Pin to Top'}</div>
+                    <div class="note-edit" onclick="editNote(${note.id})">Edit Note</div>
+                    <div class="note-delete" onclick="deleteItem('note', ${originalIndex})">Delete Note</div>
+                </div>
+            </div>`;
+    });
+}
+
+function updateSavingsTab() {
+    let summary = {}, curYear = yearSel.value;
+    [...incomes, ...expenses, ...unbudgeted, ...liabilities].forEach(item => {
+        let d = new Date(item.date);
+        if(d.getFullYear() == curYear) {
+            let key = `${fullMonths[d.getMonth()]} ${curYear}`; if(!summary[key]) summary[key] = { inc:0, exp:0, unb:0, lia:0 };
+            if(incomes.includes(item)) summary[key].inc += item.amount;
+            else if(expenses.includes(item)) summary[key].exp += item.amount;
+            else if(unbudgeted.includes(item)) summary[key].unb += item.amount;
+            else if(liabilities.includes(item)) summary[key].lia += item.amount;
+        }
+    });
+    let html = "", total = 0;
+    Object.keys(summary).sort((a,b) => fullMonths.indexOf(a.split(' ')[0]) - fullMonths.indexOf(b.split(' ')[0])).forEach(key => {
+        let ms = summary[key].inc - (summary[key].exp + summary[key].unb + summary[key].lia);
+        html += `<tr><td>${key}</td><td>${formatAmount(ms)}</td></tr>`; total += ms;
+    });
+    document.getElementById("savingsTable").innerHTML = html || "<tr><td colspan='2' style='text-align:center'>No data</td></tr>";
+    document.getElementById("overallSavings").innerText = formatAmount(total);
+}
+
+function updateChart(b,u,l,r){
+    const ctx=document.getElementById('budgetChart').getContext('2d');
+    if(myChart)myChart.destroy();
+    myChart=new Chart(ctx,{type:'doughnut',data:{labels:['Budgeted','Unbudgeted','Debt','Saved'],datasets:[{data:[b,u,l,r>0?r:0],backgroundColor:['#2c7be5','#e17055','#6c5ce7','#00cec9'],borderWidth:0}]},options:{maintainAspectRatio:false,plugins:{legend:{position:'bottom'}}}});
+}
+
+function save(){
+    localStorage.setItem("incomes",JSON.stringify(incomes)); localStorage.setItem("expenses",JSON.stringify(expenses));
+    localStorage.setItem("unbudgeted",JSON.stringify(unbudgeted)); localStorage.setItem("liabilities",JSON.stringify(liabilities));
+    localStorage.setItem("harvests",JSON.stringify(harvests)); localStorage.setItem("harvestTransactions",JSON.stringify(harvestTransactions));
+    localStorage.setItem("contributions",JSON.stringify(contributions)); localStorage.setItem("businessNotes",JSON.stringify(businessNotes));
+    render();
+}
+
+function load(){
+    if(localStorage.getItem("isLoggedIn") === "true") { document.getElementById("loginOverlay").style.display="none"; document.getElementById("mainApp").style.display="block"; }
+    applyTheme(localStorage.getItem("theme") || "light");
+    incomes=JSON.parse(localStorage.getItem("incomes"))||[]; expenses=JSON.parse(localStorage.getItem("expenses"))||[];
+    unbudgeted=JSON.parse(localStorage.getItem("unbudgeted"))||[]; liabilities=JSON.parse(localStorage.getItem("liabilities"))||[];
+    harvests=JSON.parse(localStorage.getItem("harvests"))||[]; harvestTransactions=JSON.parse(localStorage.getItem("harvestTransactions"))||[];
+    contributions=JSON.parse(localStorage.getItem("contributions"))||[]; businessNotes=JSON.parse(localStorage.getItem("businessNotes"))||[];
+    render();
+}
+load();
+</script>
+</body>
+</html>
